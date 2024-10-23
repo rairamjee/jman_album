@@ -19,3 +19,12 @@ model Event {
   eventLocation String
   eventDate     DateTime
 }
+
+model Image {
+  id          Int      @id @default(autoincrement())
+  key         String   // S3 key for the image
+  fileName    String   // Original file name
+  contentType String   // Content type (e.g., image/jpeg)
+  s3Url       String   // Publicly accessible URL or the S3 key
+  createdAt   DateTime @default(now())
+}
