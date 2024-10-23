@@ -1,0 +1,32 @@
+version: '3.8'
+services:
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development # Change to 'production' for prod
+      - UPLOAD_AWS_ACCESS_KEY_ID=${UPLOAD_AWS_ACCESS_KEY_ID}
+      - UPLOAD_AWS_SECRET_ACCESS_KEY=${UPLOAD_AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - DATABASE_URL=${DATABASE_URL}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+    command: sh -c "npm install && npx prisma migrate deploy && npm run dev" # For development
+
+  db:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: jman
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

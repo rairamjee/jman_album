@@ -18,6 +18,7 @@ model Event {
   eventName     String
   eventLocation String
   eventDate     DateTime
+  images        Image[]  // Relation to images
 }
 
 model Image {
@@ -27,4 +28,6 @@ model Image {
   contentType String   // Content type (e.g., image/jpeg)
   s3Url       String   // Publicly accessible URL or the S3 key
   createdAt   DateTime @default(now())
+  eventId     Int      // Foreign key to Event
+  event       Event    @relation(fields: [eventId], references: [id])
 }

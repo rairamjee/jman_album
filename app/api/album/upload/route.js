@@ -14,14 +14,24 @@ const s3 = new S3({
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { original_filename, content_type } = body;
+    const { original_filename, content_type, event_id } = body;
 
-    if (!original_filename || !content_type) {
+    if (!original_filename || !content_type || !event_id) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
-        {
-          status: 400,
-        }
+        { status: 400 }
+      );
+    }
+
+    // Verify that the event exists
+    const event = await prisma.event.findUnique({
+      where: { id: parseInt(event_id) },
+    });
+
+    if (!event) {
+      return new Response(
+        JSON.stringify({ error: "Event not found" }),
+        { status: 404 }
       );
     }
 
@@ -35,24 +45,15 @@ export async function POST(req) {
       Bucket: process.env.S3_BUCKET_NAME,
       Key: key,
       ContentType: content_type,
-      Expires: 60, // 1 minute
+      Expires: 60 * 60, // 1 hour expiration
     });
 
-    // Save image details to the database
-    const newImage = await prisma.image.create({
-      data: {
-        key,
-        fileName: original_filename,
-        contentType: content_type,
-        s3Url,
-      },
-    });
-
+    // Return presigned URL and the key
     return new Response(
       JSON.stringify({
         key,
         presigned_upload_url: presignedUploadUrl,
-        image_id: newImage.id,
+        s3Url,
       }),
       { status: 200 }
     );
@@ -60,12 +61,8 @@ export async function POST(req) {
     console.error("Error processing request:", error);
 
     return new Response(
-      JSON.stringify({
-        error: "Error generating presigned URL or saving data",
-      }),
-      {
-        status: 500,
-      }
+      JSON.stringify({ error: "Error generating presigned URL" }),
+      { status: 500 }
     );
   }
 }

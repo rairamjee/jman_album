@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { useState, useRef } from "react";
 
 export default function UploadPage() {
@@ -21,64 +22,84 @@ export default function UploadPage() {
       reader.readAsDataURL(file);
     }
   };
-
   const handleUpload = async () => {
-    if (!selectedFile) {
-      setMessage("Please select a file first.");
-      return;
-    }
+  if (selectedFiles.length === 0 || !selectedEvent) {
+    setMessage("Please select both files and an event.");
+    return;
+  }
 
-    setUploading(true);
-    setMessage("");
-    abortController.current = new AbortController();
+  setUploading(true);
+  setMessage("");
+  setUploadProgress(0);
+  abortController.current = new AbortController();
 
-    try {
-      const filename = selectedFile.name;
+  try {
+    const totalFiles = selectedFiles.length;
+
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i];
       const response = await fetch("/api/album/upload", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          original_filename: filename,
-          content_type: selectedFile.type,
-          user_id: "12345", // Replace with actual user id
+          original_filename: file.name,
+          content_type: file.type,
+          event_id: selectedEvent,
         }),
-        signal: abortController.current.signal, // Attach the abort signal
+        signal: abortController.current.signal,
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
+        if (data.error && data.error.includes("Duplicate key")) {
+          setMessage(`Error: ${data.error}`);
+          setUploading(false);
+          return; // Stop further uploads if a duplicate key error occurs
+        }
         throw new Error("Failed to generate presigned URL.");
       }
 
-      const data = await response.json();
-      const { presigned_upload_url, image_id } = data;
+      const { presigned_upload_url } = data;
 
-      // Upload the file to S3
       const s3Response = await fetch(presigned_upload_url, {
         method: "PUT",
         headers: {
-          "Content-Type": selectedFile.type,
+          "Content-Type": file.type,
         },
-        body: selectedFile,
-        signal: abortController.current.signal, // Attach the abort signal
+        body: file,
+        signal: abortController.current.signal,
       });
 
-      if (s3Response.ok) {
-        setMessage(`File uploaded successfully! Image ID: ${image_id}`);
-      } else {
+      if (!s3Response.ok) {
         throw new Error("Failed to upload the file to S3.");
       }
-    } catch (error) {
-      if (abortController.current.signal.aborted) {
-        setMessage("Upload was aborted.");
-      } else {
-        setMessage("Error uploading file. Please try again.");
-      }
-    } finally {
-      setUploading(false);
+
+      setUploadProgress(((i + 1) / totalFiles) * 100);
     }
-  };
+
+    setMessage(`${totalFiles} ${totalFiles === 1 ? 'file' : 'files'} uploaded successfully!`);
+    if (onUploadComplete) {
+      onUploadComplete();
+    }
+    setTimeout(() => {
+      setOpen(false);
+      resetForm();
+    }, 2000);
+  } catch (error) {
+    if (abortController.current?.signal.aborted) {
+      setMessage("Upload was aborted.");
+    } else {
+      setMessage("Error uploading files. Please try again.");
+      console.error("Upload error:", error);
+    }
+  } finally {
+    setUploading(false);
+  }
+};
+
 
   const handleAbort = () => {
     if (abortController.current) {
@@ -98,9 +119,9 @@ export default function UploadPage() {
         />
       )}
       <br />
-      <button onClick={handleUpload} disabled={!selectedFile || uploading}>
+      <Button onClick={handleUpload} disabled={!selectedFile || uploading}>
         {uploading ? "Uploading..." : "Upload Image"}
-      </button>
+      </Button>
       {uploading && <button onClick={handleAbort}>Abort Upload</button>}
       {message && <p>{message}</p>}
     </div>
