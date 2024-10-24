@@ -7,13 +7,21 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Type {
+  AwayDay
+  TeamOuting
+  Celebration
+}
+
 model Event {
   id            Int      @id @default(autoincrement())
   eventName     String
+  eventType     Type     @default(AwayDay) // Use the enum here
   eventLocation String
   eventDate     DateTime
   images        Image[]  // Relation to images
 }
+
 
 model Image {
   id          Int      @id @default(autoincrement())

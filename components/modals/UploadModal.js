@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -19,7 +20,6 @@ import {
 import { format } from "date-fns";
 import { ImagePlus, X } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import { DialogDescription } from "@radix-ui/react-dialog";
 
 const UploadModal = ({ onUploadComplete }) => {
   const [open, setOpen] = useState(false);
@@ -68,108 +68,106 @@ const UploadModal = ({ onUploadComplete }) => {
   };
 
   const handleUpload = async () => {
-  if (selectedFiles.length === 0 || !selectedEvent) {
-    setMessage("Please select both files and an event.");
-    return;
-  }
+    if (selectedFiles.length === 0 || !selectedEvent) {
+      setMessage("Please select files and an event.");
+      return;
+    }
 
-  setUploading(true);
-  setMessage("");
-  setUploadProgress(0);
-  abortController.current = new AbortController();
+    setUploading(true);
+    setMessage("");
+    setUploadProgress(0);
+    abortController.current = new AbortController();
 
-  try {
-    const totalFiles = selectedFiles.length;
-    const uploadedImageIds = []; // Store IDs of uploaded images
+    try {
+      const totalFiles = selectedFiles.length;
+      const uploadedImageIds = [];
 
-    for (let i = 0; i < totalFiles; i++) {
-      const file = selectedFiles[i];
-      const response = await fetch("/api/album/upload", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          original_filename: file.name,
-          content_type: file.type,
-          event_id: selectedEvent,
-        }),
-        signal: abortController.current.signal,
-      });
+      for (let i = 0; i < totalFiles; i++) {
+        const file = selectedFiles[i];
+        const response = await fetch("/api/album/upload", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            original_filename: file.name,
+            content_type: file.type,
+            event_id: selectedEvent,
+            // Removed event_type from here
+          }),
+          signal: abortController.current.signal,
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (!response.ok) {
-        // Handle duplicate key error
-        if (data.error && data.error.includes("Duplicate key")) {
-          setMessage(`Error: ${data.error}`);
-          setUploading(false);
-          return; // Stop further uploads if a duplicate key error occurs
+        if (!response.ok) {
+          if (data.error && data.error.includes("Duplicate key")) {
+            setMessage(`Error: ${data.error}`);
+            setUploading(false);
+            return;
+          }
+          throw new Error("Failed to generate presigned URL.");
         }
-        throw new Error("Failed to generate presigned URL.");
+
+        const { presigned_upload_url, key } = data;
+
+        const s3Response = await fetch(presigned_upload_url, {
+          method: "PUT",
+          headers: {
+            "Content-Type": file.type,
+          },
+          body: file,
+          signal: abortController.current.signal,
+        });
+
+        if (!s3Response.ok) {
+          throw new Error("Failed to upload the file to S3.");
+        }
+
+        const newImage = await fetch("/api/album/save", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            key,
+            fileName: file.name,
+            contentType: file.type,
+            eventId: selectedEvent,
+            // Removed eventType from here
+          }),
+        });
+
+        const newImageData = await newImage.json();
+        if (!newImage.ok) {
+          throw new Error("Failed to save image details in the database.");
+        }
+        uploadedImageIds.push(newImageData.image_id);
+
+        setUploadProgress(((i + 1) / totalFiles) * 100);
       }
 
-      const { presigned_upload_url, key } = data;
-
-      // Upload the file to S3
-      const s3Response = await fetch(presigned_upload_url, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type,
-        },
-        body: file,
-        signal: abortController.current.signal,
-      });
-
-      if (!s3Response.ok) {
-        throw new Error("Failed to upload the file to S3.");
+      setMessage(`${totalFiles} ${totalFiles === 1 ? 'file' : 'files'} uploaded successfully!`);
+      if (onUploadComplete) {
+        onUploadComplete(uploadedImageIds);
       }
 
-      // Now save the image details in the database
-      const newImage = await fetch("/api/album/save", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          key,
-          fileName: file.name,
-          contentType: file.type,
-          eventId: selectedEvent,
-        }),
-      });
-
-      const newImageData = await newImage.json();
-      if (!newImage.ok) {
-        throw new Error("Failed to save image details in the database.");
+      setTimeout(() => {
+        setOpen(false);
+        resetForm();
+      }, 2000);
+      
+    } catch (error) {
+      if (abortController.current?.signal.aborted) {
+        setMessage("Upload was aborted.");
+      } else {
+        setMessage("Error uploading files. Please try again.");
+        console.error("Upload error:", error);
       }
-      uploadedImageIds.push(newImageData.image_id); // Store uploaded image IDs
-
-      setUploadProgress(((i + 1) / totalFiles) * 100);
+    } finally {
+      setUploading(false);
     }
-
-    setMessage(`${totalFiles} ${totalFiles === 1 ? 'file' : 'files'} uploaded successfully!`);
-    if (onUploadComplete) {
-      onUploadComplete(uploadedImageIds); // Pass the IDs to the parent
-    }
-
-    // Close the dialog after the upload is complete
-    setTimeout(() => {
-      setOpen(false);
-      resetForm();
-    }, 2000);
-    
-  } catch (error) {
-    if (abortController.current?.signal.aborted) {
-      setMessage("Upload was aborted.");
-    } else {
-      setMessage("Error uploading files. Please try again.");
-      console.error("Upload error:", error);
-    }
-  } finally {
-    setUploading(false);
-  }
-};
+  };
 
   const handleAbort = () => {
     if (abortController.current) {
@@ -287,8 +285,7 @@ const UploadModal = ({ onUploadComplete }) => {
           </div>
 
           {message && (
-            <p className={`text-sm text-center font-medium ${message.includes("successfully") ? "text-green-600" : "text-red-600"
-              }`}>
+            <p className={`text-sm text-center font-medium ${message.includes("successfully") ? "text-green-600" : "text-red-600"}`}>
               {message}
             </p>
           )}

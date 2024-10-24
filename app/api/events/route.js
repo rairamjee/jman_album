@@ -19,9 +19,10 @@ export async function GET(req) {
 export async function POST(req) {
   try {
     const body = await req.json(); // Parse the request body
-    const { eventName, eventLocation, eventDate } = body;
+    const { eventName, eventLocation, eventDate ,eventType } = body;
+    console.log(eventName, eventLocation, eventDate ,eventType);
 
-    if (!eventName || !eventLocation || !eventDate) {
+    if (!eventName || !eventLocation || !eventDate || !eventType) {
       return new Response(
         JSON.stringify({ error: "All fields are required" }),
         { status: 400 }
@@ -31,6 +32,7 @@ export async function POST(req) {
     const event = await prisma.event.create({
       data: {
         eventName,
+        eventType,
         eventLocation,
         eventDate: new Date(eventDate), // Convert the eventDate to Date format
       },
