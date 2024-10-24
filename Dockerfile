@@ -1,22 +1,16 @@
 # Base image for Node.js (LTS version)
-FROM node:18-alpine AS base
+FROM node:20-alpine AS base
 
 # Set working directory
 WORKDIR /app
 
 # Install dependencies based on environment
 ARG NODE_ENV
-COPY package*.json .
-
-RUN npm install
-
-# Copy Prisma schema and install Prisma CLI
-COPY prisma ./prisma/
-RUN npx prisma generate
 
 # Copy the rest of the application code
 COPY . .
-
+RUN npm install
+RUN npx prisma generate
 
 # Expose port 3000
 EXPOSE 3000
