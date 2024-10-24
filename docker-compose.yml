@@ -1,0 +1,17 @@
+version: "3.8"
+services:
+  nextjs:
+    run:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=development # Change to 'production' for prod
+      - UPLOAD_AWS_ACCESS_KEY_ID=${UPLOAD_AWS_ACCESS_KEY_ID}
+      - UPLOAD_AWS_SECRET_ACCESS_KEY=${UPLOAD_AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - DATABASE_URL=${DATABASE_URL}
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
